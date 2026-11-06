@@ -1,0 +1,88 @@
+@startuml
+title UniSenai - Fluxo do Sistema de Notificacoes
+
+skinparam monochrome true
+skinparam shadowing false
+skinparam activity {
+    BackgroundColor white
+    BorderColor black
+    FontColor black
+    DiamondBackgroundColor white
+}
+
+|Aluno|
+start
+:Selecionar vaga de estagio;
+:Enviar candidatura;
+
+|Sistema Back-End|
+:Receber candidatura;
+:Verificar disponibilidade da vaga;
+
+if (Vaga disponivel?) then ([vagaDisponivel == true])
+
+    :Salvar candidatura no banco;
+    :Gerar CandidaturaDTO;
+
+    fork
+        :Preparar confirmacao;
+        :Retornar CandidaturaDTO;
+
+        |Aluno|
+        :Visualizar candidatura confirmada;
+
+    fork again
+        |Sistema Back-End|
+        :Criar NotificacaoDTO;
+        :Publicar notificacao na fila;
+
+        |Fila de Mensagens|
+        :Armazenar mensagem;
+        :Disponibilizar mensagem ao Worker;
+    end fork
+
+    |NotificacaoWorker|
+    :Consumir mensagem;
+    :Validar dados da notificacao;
+
+    if (Email valido?) then ([emailValido == true])
+
+        :Inicializar contador de tentativas;
+
+        repeat
+            :Incrementar tentativa;
+
+            |Servico de Email|
+            :Enviar email;
+            :Retornar ResultadoEnvioDTO;
+
+            |NotificacaoWorker|
+            :Analisar resultado do envio;
+
+        repeat while (Falhou e pode tentar novamente?) is ([falhou && tentativas < 3])
+        ->[enviado || tentativas >= 3];
+
+        if (Email enviado?) then ([envioSucesso == true])
+            :Registrar notificacao enviada;
+        else ([envioSucesso == false])
+            :Registrar falha definitiva;
+        endif
+
+    else ([emailValido == false])
+        :Registrar erro de validacao;
+    endif
+
+    |Sistema Back-End|
+    :Atualizar status da notificacao;
+
+else ([vagaDisponivel == false])
+
+    :Gerar ErroDTO;
+
+    |Aluno|
+    :Visualizar vaga indisponivel;
+
+endif
+
+stop
+@enduml

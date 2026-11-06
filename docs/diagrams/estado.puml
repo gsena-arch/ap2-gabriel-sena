@@ -1,0 +1,58 @@
+
+@startuml
+title UniSenai - Diagrama de Estados da Notificacao
+
+skinparam monochrome true
+skinparam shadowing false
+skinparam state {
+    BackgroundColor white
+    BorderColor black
+    FontColor black
+}
+
+hide empty description
+
+[*] --> Pendente : criarNotificacao() / publicarNaFila()
+
+state "PENDENTE" as Pendente
+state "PROCESSAMENTO" as Processamento {
+    [*] --> Preparando
+
+    state "Preparando Envio" as Preparando
+    state "Enviando Email" as Enviando
+    state "Aguardando Retry" as Retry
+
+    Preparando : entry / carregarNotificacao()
+    Preparando : do / validarDestinatario()
+
+    Enviando : entry / registrarTentativa()
+    Enviando : do / enviarEmail()
+
+    Retry : entry / registrarFalha()
+    Retry : do / aguardarReenvio()
+
+    Preparando --> Enviando : dadosValidos [emailValido] / iniciarEnvio()
+
+    Enviando --> Retry : falhaEnvio [tentativas < 3] / agendarReenvio()
+    Retry --> Preparando : tempoDecorrido [reenvioPermitido] / reiniciarEnvio()
+}
+
+state "ENVIADA" as Enviada
+state "FALHA" as Falha
+
+Pendente : entry / registrarStatusPendente()
+Pendente : do / aguardarWorker()
+
+Pendente --> Processamento : consumirMensagem [mensagemDisponivel] / iniciarProcessamento()
+
+Processamento --> Enviada : envioConcluido [emailEnviado] / registrarSucesso()
+Processamento --> Falha : envioRecusado [tentativas >= 3] / registrarFalhaFinal()
+Processamento --> Falha : dadosInvalidos [emailInvalido] / registrarErroValidacao()
+
+Enviada : entry / atualizarStatusEnviada()
+Falha : entry / atualizarStatusFalha()
+
+Enviada --> [*]
+Falha --> [*]
+
+@enduml

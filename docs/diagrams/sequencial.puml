@@ -1,0 +1,80 @@
+
+@startuml
+title UniSenai - Sistema de Notificacoes
+
+autonumber
+
+actor Aluno
+participant "CandidaturaController" as Controller
+participant "CandidaturaService" as Candidatura
+database "Banco de Dados" as BD
+participant "NotificacaoService" as Notificacao
+queue "Fila de Mensagens" as Fila
+participant "NotificacaoWorker" as Worker
+participant "EmailService" as Email
+
+Aluno -> Controller: enviarCandidatura(vagaId)
+activate Controller
+
+Controller -> Candidatura: criarCandidatura(alunoId, vagaId)
+activate Candidatura
+
+Candidatura -> BD: verificarVaga(vagaId)
+BD --> Candidatura: VagaDTO
+
+alt Vaga disponivel
+
+    Candidatura -> BD: salvarCandidatura(dados)
+    BD --> Candidatura: CandidaturaDTO
+
+    Candidatura --> Controller: CandidaturaDTO
+    deactivate Candidatura
+
+    Controller ->> Notificacao: solicitarNotificacao(CandidaturaDTO)
+    activate Notificacao
+
+    Notificacao ->> Fila: publicar(NotificacaoDTO)
+    Notificacao --> Controller: SolicitacaoDTO
+    deactivate Notificacao
+
+    Controller --> Aluno: CandidaturaDTO
+    deactivate Controller
+
+    Fila ->> Worker: processar(NotificacaoDTO)
+    activate Worker
+
+    Worker -> Email: enviarEmail(NotificacaoDTO)
+    activate Email
+
+    alt Email enviado com sucesso
+        Email --> Worker: ResultadoEnvioDTO(sucesso)
+
+        Worker -> BD: registrarNotificacao(NotificacaoDTO)
+        BD --> Worker: NotificacaoDTO
+
+    else Falha no envio
+        Email --> Worker: ResultadoEnvioDTO(erro)
+
+        loop Ate 3 tentativas
+            Worker -> Email: enviarEmail(NotificacaoDTO)
+            Email --> Worker: ResultadoEnvioDTO
+        end
+
+        Worker -> BD: atualizarStatusNotificacao(ResultadoEnvioDTO)
+        BD --> Worker: StatusNotificacaoDTO
+    end
+
+    deactivate Email
+    deactivate Worker
+
+else Vaga indisponivel
+
+    Candidatura --> Controller: ErroDTO
+    deactivate Candidatura
+
+    Controller --> Aluno: ErroDTO
+    deactivate Controller
+
+end
+
+@enduml

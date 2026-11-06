@@ -1,0 +1,42 @@
+
+@startuml
+!include <C4/C4_Container>
+
+title C4 Nivel 2 - Sistema de Notificacoes UniSenai
+
+LAYOUT_LEFT_RIGHT()
+
+Person(aluno, "Aluno", "Realiza candidaturas e recebe notificacoes")
+
+System_Boundary(unisenai, "Sistema UniSenai") {
+
+    Container(frontend, "Front-End Web", "React + TypeScript", "Interface de candidaturas")
+
+    Container(backend, "API Back-End", "Node.js + Express + TypeScript", "Gerencia candidaturas e notificacoes")
+
+    ContainerDb(banco, "Banco de Dados", "PostgreSQL 16", "Armazena alunos, vagas, candidaturas e notificacoes")
+
+    ContainerQueue(fila, "Fila de Mensagens", "RabbitMQ", "Armazena eventos de notificacao")
+
+    Container(worker, "Notificacao Worker", "Node.js + TypeScript", "Processa mensagens e envia emails")
+}
+
+System_Ext(email, "Servico de Email", "Provedor SMTP externo")
+
+Rel(aluno, frontend, "Envia candidatura", "HTTPS")
+
+Rel(frontend, backend, "Envia dados e recebe DTOs", "HTTPS / REST / JSON")
+
+Rel(backend, banco, "Consulta e persiste dados", "PostgreSQL / TCP")
+
+Rel(backend, fila, "Publica NotificacaoDTO", "AMQP 0-9-1 / TCP")
+
+Rel(worker, fila, "Consome mensagens e confirma processamento", "AMQP 0-9-1 / TCP")
+
+Rel(worker, email, "Solicita envio de emails", "SMTP / TLS")
+
+Rel(worker, banco, "Atualiza status e tentativas", "PostgreSQL / TCP")
+
+Rel(email, aluno, "Entrega notificacoes", "Email")
+
+@enduml
